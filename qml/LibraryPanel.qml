@@ -15,7 +15,7 @@ Panel {
 
     title: "Library"
     note: root.lib.count + " tracks" + (root.lib.analyzingCount > 0 ? " · analyzing " + root.lib.analyzingCount : "")
-    tools: ParamButton { text: "Add…"; onClicked: dialog.open() }
+    tools: ParamButton { icon: "add"; tip: "Add tracks or folders"; onClicked: dialog.open() }
 
     FileDialog {
         id: dialog
@@ -75,6 +75,8 @@ Panel {
         id: db
         property color accent
         property alias text: b.text
+        property alias icon: b.icon
+        property alias tip: b.tip
         signal clicked()
         implicitWidth: Theme.s(28)
         implicitHeight: Theme.s(22)
@@ -100,10 +102,12 @@ Panel {
                 onClicked: root.lib.newPlaylist("")
             }
             ParamButton {
-                // two clicks: ✕, then Delete? within 3 s
+                // two clicks: the bin, then Delete? within 3 s
                 id: deleteButton
                 property bool armed: false
-                text: armed ? "Delete?" : "\u2715"
+                icon: armed ? "" : "delete"
+                text: armed ? "Delete?" : ""
+                tip: "Delete this playlist"
                 danger: armed
                 enabled: root.lib.view >= 0
                 onClicked: {
@@ -261,7 +265,8 @@ Panel {
                         DeckButton {
                             // into the playlist opened last (All tracks only)
                             visible: root.lib.view < 0 && root.lib.target >= 0
-                            text: "+"
+                            icon: "add"
+                            tip: "Put it in \u201C" + root.lib.playlists[root.lib.target] + "\u201D"
                             accent: Look.neutral
                             onClicked: root.lib.addToPlaylist(row.index, root.lib.target)
                         }

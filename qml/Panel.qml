@@ -19,26 +19,25 @@ Item {
         // no title, no header row
         height: root.title.length || root.note.length || tools.children.length ? Theme.s(30) : 0
         visible: height > 0
-        Text {
+        ParamText {
             id: titleText
             anchors.verticalCenter: parent.verticalCenter
             text: root.title
+            caps: true
             color: root.titleColor
-            font.family: Theme.family
             font.pixelSize: Theme.labelSize
-            font.weight: Font.Bold
             font.letterSpacing: Theme.s(0.5)
-            font.capitalization: Font.AllUppercase
+            wrapMode: Text.NoWrap
         }
-        Text {
+        ParamText {
             x: titleText.width + Theme.s(8)
             width: Math.max(0, tools.x - x - Theme.s(8))
             anchors.baseline: titleText.baseline
             text: root.note
+            tone: "faint"
+            small: true
             elide: Text.ElideRight
-            color: Theme.textFaint
-            font.family: Theme.family
-            font.pixelSize: Theme.smallSize
+            wrapMode: Text.NoWrap
         }
         Row {
             id: tools

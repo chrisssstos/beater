@@ -61,21 +61,22 @@ Item {
         z: active || editing ? 2 : kind === "custom" ? 1 : 0
         color: editing || active ? Theme.litOf(lane.tint) : lane.tint
         opacity: editing || active ? 1 : armed ? 0.55 : 0.22
-        ParamGlow { anchors.fill: parent; z: -1; color: lane.tint; strength: r.active || r.editing ? 0.7 : 0 }
+        layer.enabled: Theme.glow && (r.active || r.editing) && isFinite(r.width)
+        layer.effect: ParamGlow { w: r.width; h: r.height; glowColor: lane.tint; strength: 0.7 }
         // the ends you can grab
         Rectangle { width: Math.min(lane.handle, parent.width / 2); height: parent.height; color: Theme.edgeOf(r.color) }
         Rectangle { x: parent.width - width; width: Math.min(lane.handle, parent.width / 2); height: parent.height; color: Theme.edgeOf(r.color) }
-        Text {
+        ParamText {
             // without tags (Perform), the bar says what it is
             anchors.centerIn: parent
             visible: !lane.tags && implicitWidth < parent.width - 2 * lane.handle - Theme.s(4)
             readonly property real beats: r.b - r.a
             readonly property string len: beats % 4 === 0 ? beats / 4 + (beats === 4 ? " bar" : " bars") : beats + " beats"
             text: r.kind === "intro" ? "intro · " + len : r.kind === "end" ? "outro · " + len : "in/out · " + len
+            small: true
             color: Theme.inkOf(r.color)
-            font.family: Theme.family
-            font.pixelSize: Theme.smallSize
             font.weight: Font.Bold
+            wrapMode: Text.NoWrap
         }
     }
 
@@ -96,7 +97,8 @@ Item {
         color: Theme.litOf(lane.tint)
         opacity: 0.9
         z: 3
-        ParamGlow { anchors.fill: parent; z: -1; color: lane.tint; strength: 0.7 }
+        layer.enabled: Theme.glow && isFinite(pendingRegion.width)
+        layer.effect: ParamGlow { w: pendingRegion.width; h: pendingRegion.height; glowColor: lane.tint; strength: 0.7 }
     }
 
     // ---- name tags: solid while looping, outlined while armed, dim when off; click = on / off
@@ -114,13 +116,13 @@ Item {
         color: on ? Theme.litOf(lane.tint) : "transparent"
         border.width: 1
         border.color: on || armed ? lane.tint : Theme.line
-        Text {
+        ParamText {
             id: label
             anchors.centerIn: parent
             text: t.text
+            small: true
             color: t.on ? Theme.inkOf(lane.tint) : t.armed ? lane.tint : Theme.textFaint
-            font.family: Theme.family
-            font.pixelSize: Theme.smallSize
+            wrapMode: Text.NoWrap
         }
         MouseArea {
             anchors.fill: parent

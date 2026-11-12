@@ -35,17 +35,21 @@ ParamPlate {
         RowLayout {
             spacing: Theme.s(6)
             Rectangle {
+                id: badge
                 implicitWidth: Theme.s(18)
                 implicitHeight: Theme.s(18)
+                radius: Theme.radius
                 color: Theme.litOf(root.accent)
-                ParamGlow { anchors.fill: parent; z: -1; color: root.accent }
-                Text {
+                layer.enabled: Theme.glow
+                layer.effect: ParamGlow { w: badge.width; h: badge.height; glowColor: root.accent }
+                ParamText {
                     anchors.centerIn: parent
                     text: root.deck.name
+                    tone: "normal"
+                    small: true
                     color: Theme.inkOf(root.accent)
-                    font.family: Theme.family
-                    font.pixelSize: Theme.smallSize
                     font.weight: Font.Bold
+                    wrapMode: Text.NoWrap
                 }
             }
             ParamText {
@@ -116,14 +120,16 @@ ParamPlate {
                 ParamButton {
                     // paused: play from here; playing: again from the start
                     implicitWidth: Theme.s(34)
-                    icon: "\u25B6"
+                    icon: "play"
+                    tip: "Play (playing: again from the start)"
                     accent: root.deck.playing
                     enabled: root.deck.loaded
                     onClicked: root.deck.play()
                 }
                 ParamButton {
                     implicitWidth: Theme.s(34)
-                    icon: "\u275A\u275A"
+                    icon: "pause"
+                    tip: "Pause"
                     accent: root.deck.loaded && !root.deck.playing
                     enabled: root.deck.loaded
                     onClicked: root.deck.pause()

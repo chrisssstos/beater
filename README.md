@@ -85,7 +85,7 @@ that mode, `BEATER_FPS=1` logs frames per second and the time spent building wav
 - **Beat squares** per deck (Edit and Perform): four squares walk 1-2-3-4 through the bar,
   the 1 brightest. A playing deck shows its own beats; a stopped one shows the master's,
   dimmed, which it locks to when you press play, so you can start it on the 1.
-- **Play / Pause**: two buttons, the state you're in solid. PLAY while paused plays from
+- **Play / Pause**: two icon buttons (hover for what they do), the state you're in solid. PLAY while paused plays from
   there; PLAY again while playing starts the track over from its first bar line. Jumps keep
   a synced deck in phase: it lands at the same place in the beat (in the bar, with bar phase
   lock), at or just after the target.
@@ -98,7 +98,8 @@ that mode, `BEATER_FPS=1` logs frames per second and the time spent building wav
   and the first one loads. Over a playing deck the drop target turns red: it replaces that
   track.
 - **Library**: every track you've added, and your saved playlists (the dropdown at the top).
-  NEW makes a playlist (type its name in the field); ✕ then "Delete?" removes one. With a
+  NEW makes a playlist (type its name in the field); the bin then "Delete?" removes one;
+  + by the Library title adds tracks or folders. With a
   playlist open, files you drop or add go into it too, and ⌫ takes one out; in All tracks, +
   puts a track in the playlist you opened last, and ⌫ removes it from the library. It all
   lives in library.json, the open view too.

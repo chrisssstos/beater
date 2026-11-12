@@ -80,17 +80,20 @@ Panel {
         RowLayout {
             spacing: Theme.s(10)
             Rectangle {
+                id: badge
                 implicitWidth: Theme.s(22)
                 implicitHeight: Theme.s(22)
+                radius: Theme.radius
                 color: Theme.litOf(root.accent)
-                ParamGlow { anchors.fill: parent; z: -1; color: root.accent }
-                Text {
+                layer.enabled: Theme.glow
+                layer.effect: ParamGlow { w: badge.width; h: badge.height; glowColor: root.accent }
+                ParamText {
                     anchors.centerIn: parent
                     text: root.deck.name
+                    tone: "normal"
                     color: Theme.inkOf(root.accent)
-                    font.family: Theme.family
-                    font.pixelSize: Theme.labelSize
                     font.weight: Font.Bold
+                    wrapMode: Text.NoWrap
                 }
             }
             ParamText {
@@ -189,15 +192,15 @@ Panel {
                     spacing: Theme.s(4)
                     Btn {
                         // paused: play from here; playing: again from the start
-                        icon: "\u25B6"
-                        text: "Play"
+                        icon: "play"
+                        tip: "Play (playing: again from the start)"
                         accent: root.deck.playing
                         enabled: root.deck.loaded
                         onClicked: root.deck.play()
                     }
                     Btn {
-                        icon: "\u275A\u275A"
-                        text: "Pause"
+                        icon: "pause"
+                        tip: "Pause"
                         accent: root.deck.loaded && !root.deck.playing
                         enabled: root.deck.loaded
                         onClicked: root.deck.pause()
@@ -320,7 +323,7 @@ Panel {
                 RowLayout {
                     Btn {
                         objectName: "gridEditButton"
-                        icon: "✎"
+                        icon: "pencil"
                         implicitWidth: Theme.s(34)
                         enabled: root.deck.loaded
                         onClicked: root.gridEdit = true
@@ -354,8 +357,8 @@ Panel {
                     Btn { text: "=M"; enabled: root.deck.bpm > 0; onClicked: root.app.matchMasterTo(root.deck.index) }
                     Gap {}
                     Label { text: "grid" }
-                    Btn { icon: "◀"; implicitWidth: Theme.s(28); enabled: root.deck.bpm > 0; onClicked: root.deck.nudgeGrid(-5) }
-                    Btn { icon: "▶"; implicitWidth: Theme.s(28); enabled: root.deck.bpm > 0; onClicked: root.deck.nudgeGrid(5) }
+                    Btn { icon: "back"; tip: "Grid 5 ms earlier"; implicitWidth: Theme.s(28); enabled: root.deck.bpm > 0; onClicked: root.deck.nudgeGrid(-5) }
+                    Btn { icon: "play"; tip: "Grid 5 ms later"; implicitWidth: Theme.s(28); enabled: root.deck.bpm > 0; onClicked: root.deck.nudgeGrid(5) }
                     Btn { text: "Set 1"; enabled: root.deck.bpm > 0; onClicked: root.deck.setDownbeatHere() }
                     // back to the detected BPM and grid
                     Btn { text: "Auto"; enabled: root.deck.gridManual && !root.deck.analyzing; onClicked: root.deck.autoGrid() }
@@ -386,7 +389,7 @@ Panel {
                 RowLayout {
                     Btn {
                         // back to playing
-                        icon: "✎"
+                        icon: "pencil"
                         text: "Done"
                         checkable: true
                         checked: true

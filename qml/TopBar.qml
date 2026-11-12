@@ -16,13 +16,13 @@ Item {
         anchors.fill: parent
         spacing: Theme.s(16)
 
-        Text {
+        ParamText {
             text: "BEATER"
             color: Theme.accent
-            font.family: Theme.family
             font.pixelSize: Theme.s(20)
             font.weight: Font.Black
             font.letterSpacing: Theme.s(2)
+            wrapMode: Text.NoWrap
         }
 
         Column {
