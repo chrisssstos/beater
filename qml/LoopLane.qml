@@ -22,8 +22,10 @@ Item {
     readonly property bool ready: deck.loaded && deck.bpm > 0 && deck.duration > 0
     readonly property real handle: Theme.s(7)
 
-    function xAtBeat(b) { return (deck.firstBeat + b * 60 / deck.bpm) / deck.duration * width }
-    function beatAtX(x) { return (x / width * deck.duration - deck.firstBeat) * deck.bpm / 60 }
+    // Without a BPM (a dropped file still being analysed) there's no grid: 0,
+    // never Infinity (an infinite width hangs Qt's renderer in the glow).
+    function xAtBeat(b) { return ready ? (deck.firstBeat + b * 60 / deck.bpm) / deck.duration * width : 0 }
+    function beatAtX(x) { return ready && width > 0 ? (x / width * deck.duration - deck.firstBeat) * deck.bpm / 60 : 0 }
     function snap(b, fine) { const q = fine ? 1 : 4; return Math.round(b / q) * q }
     // The bar lines (beats with Option) a loop may use: as BeatGrid's
     // first/lastLoopBeat, a bar cut short by under half a beat still counts.
