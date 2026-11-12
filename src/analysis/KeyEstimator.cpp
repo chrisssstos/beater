@@ -5,148 +5,170 @@
 #include <array>
 #include <cmath>
 #include <complex>
-#include <numeric>
 
 namespace {
 
-constexpr int kFft = 8192;
-constexpr int kHop = 4096;
-// Pitch range folded into the chroma: E2 .. C7. Below E2 the bins are too
-// coarse at this FFT size to tell neighbouring semitones apart.
-constexpr double kMinMidi = 40.0;
-constexpr double kMaxMidi = 96.0;
+// The log-frequency grid: 3 bins per semitone, MIDI 24 (C1) .. 108 (C8).
+constexpr int kBinsPerSemi = 3;
+constexpr int kLoMidi = 24;
+constexpr int kHiMidi = 108;
+constexpr int kLogBins = (kHiMidi - kLoMidi) * kBinsPerSemi + 1;
+constexpr int kSemis = 84;            // semitone centres MIDI 24 .. 107
+constexpr double kGamma = 100.0;      // log compression: log(1 + gamma * s / max)
+constexpr int kWhiten = 12;           // bins (4 semitones) of the moving average taken off
+constexpr int kBassLo = 28, kBassHi = 52;     // E1 .. Eb3
+constexpr int kTrebleLo = 48, kTrebleHi = 96; // C3 .. B6
 
-// In this music the bass names the key, and most tracks are minor: on 85 of
-// my edits labelled with their key (all but one minor), these two raised exact
-// hits from 46 to 58 (fifths are most of what's left).
-constexpr double kBassTonic = 0.45; // * the bass's share of the tonic (vs its strongest note)
-constexpr double kMinorBias = 0.15; // added to every minor key's score
-constexpr double kBassTopMidi = 52.5; // the bass: E2 .. E3
-
-// Temperley's Kostka-Payne key profiles, tonic first. Krumhansl-Kessler
-// confused major keys with their mediant minor (Eb -> Gm) on harmonic-rich pads.
-constexpr std::array<double, 12> kMajor = {0.748, 0.060, 0.488, 0.082, 0.670, 0.460, 0.096, 0.715, 0.104, 0.366, 0.057, 0.400};
-constexpr std::array<double, 12> kMinor = {0.712, 0.084, 0.474, 0.618, 0.049, 0.460, 0.105, 0.747, 0.404, 0.067, 0.133, 0.330};
-
-double correlate(const std::array<double, 12> &chroma, const std::array<double, 12> &profile, int tonic)
-{
-    double mc = 0, mp = 0;
-    for (int i = 0; i < 12; ++i) {
-        mc += chroma[size_t(i)];
-        mp += profile[size_t(i)];
-    }
-    mc /= 12.0;
-    mp /= 12.0;
-    double num = 0, dc = 0, dp = 0;
-    for (int i = 0; i < 12; ++i) {
-        const double c = chroma[size_t((i + tonic) % 12)] - mc;
-        const double p = profile[size_t(i)] - mp;
-        num += c * p;
-        dc += c * c;
-        dp += p * p;
-    }
-    return dc > 0 && dp > 0 ? num / std::sqrt(dc * dp) : 0.0;
-}
+// Learned from labelled tracks (multinomial logistic regression over the 24
+// keys, profiles shared by rotation): tonic first, then each semitone up.
+constexpr std::array<double, 12> kMajorBass = {0.5119, 0.2113, 0.1633, -0.8585, 0.3261, 0.6000, -0.2059, 0.4935, -0.4554, -0.3980, -0.2146, -0.1788};
+constexpr std::array<double, 12> kMajorTreble = {2.2943, -0.5884, 0.4240, -1.4622, 1.2114, -0.0243, -0.0998, 1.0084, -0.8158, -0.6137, -1.4154, 0.0765};
+constexpr std::array<double, 12> kMinorBass = {0.6376, 0.3103, -0.6780, -0.0322, -0.5539, -0.2475, 0.0536, 0.2716, 0.4406, -0.2435, -0.1076, 0.1542};
+constexpr std::array<double, 12> kMinorTreble = {2.1016, -0.1765, 0.5519, 0.5457, -0.7749, -0.6645, -0.5732, 1.2988, -0.9046, -1.1458, -0.0425, -0.2109};
+constexpr double kMinorBias = 3.0682; // most of this music is minor
+constexpr double kFeatureScale = 10.0; // the chroma (each summing to 1) as the model saw them
 
 } // namespace
 
 KeyResult estimateKey(const std::vector<float> &x, uint32_t sr)
 {
     KeyResult res;
-    if (sr == 0 || x.size() < size_t(kFft) * 4)
+    if (sr == 0)
         return res;
+    // A window of ~0.74 s (16384 at 22050 Hz): bass semitones need it.
+    int n = 1;
+    while (n < int(sr * 16384.0 / 22050.0 * 0.75))
+        n <<= 1;
+    const int hop = n / 4;
+    if (x.size() < size_t(n) * 4)
+        return res;
+    const int bins = n / 2 + 1;
+    const size_t frames = (x.size() - size_t(n)) / size_t(hop) + 1;
 
-    // Which pitch class each bin feeds, and how much (1 at the semitone's
-    // centre, falling to 0 half a semitone away).
-    const int bins = kFft / 2;
-    std::vector<int> binPc(size_t(bins), -1);
-    std::vector<float> binW(size_t(bins), 0.0f);
+    // Each FFT bin feeds the (up to two) log bins next to it, by distance.
+    std::vector<int> toBin(size_t(bins), -1);
+    std::vector<float> toW(size_t(bins), 0.0f);
     for (int b = 1; b < bins; ++b) {
-        const double f = double(b) * sr / kFft;
-        const double midi = 69.0 + 12.0 * std::log2(f / 440.0);
-        if (midi < kMinMidi - 0.5 || midi > kMaxMidi + 0.5)
+        const double midi = 69.0 + 12.0 * std::log2(double(b) * sr / n / 440.0);
+        const double pos = (midi - kLoMidi) * kBinsPerSemi;
+        const int lo = int(std::floor(pos));
+        if (lo < -1 || lo >= kLogBins)
             continue;
-        const double nearest = std::round(midi);
-        binPc[size_t(b)] = int(nearest) % 12;
-        binW[size_t(b)] = float(1.0 - 2.0 * std::abs(midi - nearest));
+        toBin[size_t(b)] = lo;
+        toW[size_t(b)] = float(pos - lo); // share for lo + 1; 1 - share for lo
     }
 
-    std::vector<float> win(kFft);
-    for (int i = 0; i < kFft; ++i)
-        win[size_t(i)] = 0.5f - 0.5f * std::cos(2.0f * float(M_PI) * float(i) / float(kFft));
+    std::vector<float> win(static_cast<size_t>(n));
+    for (int i = 0; i < n; ++i)
+        win[size_t(i)] = 0.5f - 0.5f * std::cos(2.0f * float(M_PI) * float(i) / float(n - 1));
 
-    std::array<double, 12> chroma{}, bass{};
-    std::vector<bool> binBass(size_t(bins), false);
-    for (int b = 1; b < bins; ++b)
-        binBass[size_t(b)] = 69.0 + 12.0 * std::log2(double(b) * sr / kFft / 440.0) < kBassTopMidi;
-    std::vector<std::complex<float>> buf(kFft);
-    std::vector<float> mag(static_cast<size_t>(bins));
-    const size_t frames = (x.size() - kFft) / kHop + 1;
-    // Frames quieter than this (relative to the loudest) are breaks or silence.
-    std::vector<double> frameEnergy(frames, 0.0);
-    std::vector<std::array<double, 12>> frameChroma(frames), frameBass(frames);
-    double loudest = 0.0;
+    std::vector<float> spec(frames * kLogBins, 0.0f);
+    std::vector<std::complex<float>> buf(static_cast<size_t>(n));
+    float peak = 0.0f;
     for (size_t t = 0; t < frames; ++t) {
-        const size_t off = t * kHop;
-        for (int i = 0; i < kFft; ++i)
+        const size_t off = t * size_t(hop);
+        for (int i = 0; i < n; ++i)
             buf[size_t(i)] = {x[off + size_t(i)] * win[size_t(i)], 0.0f};
         fftInPlace(buf);
-        for (int b = 0; b < bins; ++b)
-            mag[size_t(b)] = std::abs(buf[size_t(b)]);
-        std::array<double, 12> c{}, cb{};
-        double e = 0.0;
-        // Spectral peaks only: tones, not the broadband noise of drums.
-        for (int b = 2; b < bins - 1; ++b) {
-            if (binPc[size_t(b)] < 0)
+        float *row = &spec[t * kLogBins];
+        for (int b = 1; b < bins; ++b) {
+            const int lo = toBin[size_t(b)];
+            if (lo < -1)
                 continue;
-            const float m = mag[size_t(b)];
-            if (m <= mag[size_t(b - 1)] || m < mag[size_t(b + 1)])
-                continue;
-            // sqrt: softer than linear, but keeps upper partials below the fundamentals
-            const double v = std::sqrt(double(m)) * binW[size_t(b)];
-            c[size_t(binPc[size_t(b)])] += v;
-            if (binBass[size_t(b)])
-                cb[size_t(binPc[size_t(b)])] += v;
-            e += v;
+            const float m = std::abs(buf[size_t(b)]);
+            const float w = toW[size_t(b)];
+            if (lo >= 0)
+                row[lo] += m * (1.0f - w);
+            if (lo + 1 < kLogBins)
+                row[lo + 1] += m * w;
         }
-        frameEnergy[t] = e;
-        frameChroma[t] = c;
-        frameBass[t] = cb;
-        loudest = std::max(loudest, e);
+        for (int i = 0; i < kLogBins; ++i)
+            peak = std::max(peak, row[i]);
     }
-    if (loudest <= 0.0)
+    if (peak <= 0.0f)
         return res;
-    // Each usable frame counts equally, so a loud drop doesn't outvote the rest.
+
+    // Tuning: the circular mean of where in the semitone (which third) the energy is.
+    std::array<double, 3> third{};
+    for (size_t t = 0; t < frames; ++t)
+        for (int i = 0; i < kLogBins; ++i)
+            third[size_t(i % 3)] += spec[t * kLogBins + size_t(i)];
+    double re = 0, im = 0;
+    for (int i = 0; i < 3; ++i) {
+        re += third[size_t(i)] * std::cos(2.0 * M_PI * i / 3.0);
+        im += third[size_t(i)] * std::sin(2.0 * M_PI * i / 3.0);
+    }
+    const double tune = std::atan2(im, re) / (2.0 * M_PI) * 3.0; // in log bins, -1.5 .. 1.5
+
+    std::array<double, 12> bass{}, treble{};
+    std::vector<double> lg(kLogBins), avg(kLogBins);
+    std::array<double, kSemis> semi{};
     for (size_t t = 0; t < frames; ++t) {
-        if (frameEnergy[t] < 0.2 * loudest)
-            continue;
-        for (int i = 0; i < 12; ++i) {
-            chroma[size_t(i)] += frameChroma[t][size_t(i)] / frameEnergy[t];
-            bass[size_t(i)] += frameBass[t][size_t(i)] / frameEnergy[t];
+        const float *row = &spec[t * kLogBins];
+        for (int i = 0; i < kLogBins; ++i)
+            lg[size_t(i)] = std::log1p(kGamma * row[i] / peak);
+        // whitening: minus the average of the 12 bins round it (i - 6 .. i + 5,
+        // mirrored at the ends), floored at 0
+        for (int i = 0; i < kLogBins; ++i) {
+            double s = 0.0;
+            for (int j = i - kWhiten / 2; j < i + kWhiten / 2; ++j) {
+                int k = j < 0 ? -j - 1 : j >= kLogBins ? 2 * kLogBins - j - 1 : j;
+                s += lg[size_t(k)];
+            }
+            avg[size_t(i)] = s / kWhiten;
         }
+        double total = 0.0;
+        for (int s = 0; s < kSemis; ++s) {
+            const double pos = s * kBinsPerSemi + tune;
+            const int i0 = std::clamp(int(std::floor(pos)), 0, kLogBins - 2);
+            const double fr = pos - std::floor(pos);
+            const double a = std::max(0.0, lg[size_t(i0)] - avg[size_t(i0)]);
+            const double b = std::max(0.0, lg[size_t(i0 + 1)] - avg[size_t(i0 + 1)]);
+            semi[size_t(s)] = a * (1.0 - fr) + b * fr;
+            total += semi[size_t(s)];
+        }
+        if (total <= 0.0)
+            continue;
+        // each frame counts equally, so a loud drop doesn't outvote the rest
+        for (int s = 0; s < kSemis; ++s) {
+            const int midi = kLoMidi + s;
+            const double v = semi[size_t(s)] / total;
+            if (midi >= kBassLo && midi < kBassHi)
+                bass[size_t(midi % 12)] += v;
+            if (midi >= kTrebleLo && midi < kTrebleHi)
+                treble[size_t(midi % 12)] += v;
+        }
+    }
+    double sb = 0, st = 0;
+    for (int i = 0; i < 12; ++i) {
+        sb += bass[size_t(i)];
+        st += treble[size_t(i)];
+    }
+    if (sb <= 0.0 || st <= 0.0)
+        return res;
+    for (int i = 0; i < 12; ++i) {
+        bass[size_t(i)] *= kFeatureScale / sb;
+        treble[size_t(i)] *= kFeatureScale / st;
     }
 
-    const double bassTop = *std::max_element(bass.begin(), bass.end());
-    double best = -2.0, second = -2.0;
-    int bestKey = -1;
+    std::array<double, 24> score{};
     for (int k = 0; k < 24; ++k) {
-        double r = correlate(chroma, k < 12 ? kMajor : kMinor, k % 12);
-        if (k >= 12)
-            r += kMinorBias;
-        if (bassTop > 0.0)
-            r += kBassTonic * bass[size_t(k % 12)] / bassTop;
-        if (r > best) {
-            second = best;
-            best = r;
-            bestKey = k;
-        } else if (r > second) {
-            second = r;
+        const bool minor = k >= 12;
+        const auto &pb = minor ? kMinorBass : kMajorBass;
+        const auto &pt = minor ? kMinorTreble : kMajorTreble;
+        double z = minor ? kMinorBias : 0.0;
+        for (int i = 0; i < 12; ++i) {
+            const size_t pc = size_t((i + k) % 12);
+            z += pb[size_t(i)] * bass[pc] + pt[size_t(i)] * treble[pc];
         }
+        score[size_t(k)] = z;
     }
-    if (bestKey < 0 || best <= 0.0)
-        return res;
+    const int best = int(std::max_element(score.begin(), score.end()) - score.begin());
+    double sum = 0.0;
+    for (double z : score)
+        sum += std::exp(z - score[size_t(best)]);
     res.ok = true;
-    res.key = bestKey;
-    res.confidence = std::clamp((best - second) * 5.0, 0.0, 1.0);
+    res.key = best;
+    res.confidence = 1.0 / sum;
     return res;
 }

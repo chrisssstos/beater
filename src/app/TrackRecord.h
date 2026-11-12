@@ -6,7 +6,7 @@
 
 // Bump when the analyzers change, so tracks analyzed before get analyzed again
 // (manual edits are kept either way).
-constexpr int kAnalysisVersion = 4; // 2: key detection, 3: fine beat phase + grid from the start, 4: minor / bass key
+constexpr int kAnalysisVersion = 5; // 2: key detection, 3: fine beat phase + grid from the start, 4: minor / bass key, 5: learned key profiles
 // Everything the app remembers about a track. Keyed by a content hash so edits
 // survive renames and moves.
 struct TrackRecord {
