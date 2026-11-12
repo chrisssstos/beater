@@ -148,6 +148,7 @@ void DeckController::refreshFromLibrary(const QString &id)
                        || r.introStartBeat != m_rec.introStartBeat || r.introEndBeat != m_rec.introEndBeat
                        || r.customStartBeat != m_rec.customStartBeat || r.customEndBeat != m_rec.customEndBeat;
     const bool titleDiff = r.title != m_rec.title;
+    const bool sectionsDiff = r.sections != m_rec.sections || r.firstDropSec != m_rec.firstDropSec;
     m_rec = r;
     if (gridDiff) {
         sendGrid();
@@ -159,7 +160,7 @@ void DeckController::refreshFromLibrary(const QString &id)
         sendLoop();
         emit loopChanged();
     }
-    if (manualDiff && !gridDiff)
+    if ((manualDiff || sectionsDiff) && !gridDiff)
         emit gridChanged();
     if (keyDiff)
         emit keyChanged();
@@ -524,6 +525,52 @@ void DeckController::setSync(bool on)
     m_engine->post(m_index, {DeckCommand::SetSync, on ? 1.0 : 0.0});
     emit syncChanged();
     updatePlayingBpm();
+}
+
+double DeckController::barAtSec(double sec) const
+{
+    const BeatGrid g = m_rec.grid();
+    return g.valid() ? std::round(g.beatAtSec(sec) / 4.0) * 4.0 : 0.0;
+}
+
+QVariantList DeckController::sections() const
+{
+    QVariantList out;
+    if (!m_rec.grid().valid())
+        return out;
+    for (const TrackSection &s : m_rec.sections)
+        out.append(QVariantMap{{"start", barAtSec(s.startSec)}, {"end", barAtSec(s.endSec)}, {"drop", s.drop}});
+    return out;
+}
+
+double DeckController::firstDropBeat() const
+{
+    return m_rec.firstDropSec >= 0.0 && m_rec.grid().valid() ? barAtSec(m_rec.firstDropSec) : -1.0;
+}
+
+void DeckController::setMix(const QString &role, double startBeat, double endBeat)
+{
+    if (role == m_mixRole && startBeat == m_mixStart && endBeat == m_mixEnd)
+        return;
+    m_mixRole = role;
+    m_mixStart = startBeat;
+    m_mixEnd = endBeat;
+    emit mixChanged();
+}
+
+void DeckController::scheduleStart(double masterBeat, double trackBeat)
+{
+    if (!m_buffer || !m_rec.grid().valid())
+        return;
+    m_introArmed = false;
+    m_customOn = false;
+    m_customPending = false;
+    m_loopSwitchedAt.start();
+    sendLoop();
+    emit loopChanged();
+    if (!m_sync)
+        setSync(true);
+    m_engine->post(m_index, {DeckCommand::PlayAt, masterBeat, trackBeat});
 }
 
 void DeckController::setIntroArmed(bool on)

@@ -40,6 +40,7 @@ Item {
                     Layout.alignment: Qt.AlignVCenter
                 }
                 Item { Layout.fillWidth: true }
+                AutoDjButton { app: root.app }
                 ParamButton {
                     // keep the window above Resolume
                     text: "Pin"
@@ -51,6 +52,11 @@ Item {
             ModeSwitch {
                 mode: "strip"
                 onSwitched: m => root.modeRequested(m)
+            }
+            AutoDjStatus {
+                app: root.app
+                Layout.fillWidth: true
+                Layout.maximumWidth: Theme.s(240)
             }
             ParamSlider {
                 property color accent: Look.neutral

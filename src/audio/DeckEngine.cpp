@@ -93,11 +93,13 @@ TrackBufferPtr *DeckEngine::handle(const DeckCommand &cmd, const MasterState &m)
         garbage = m_track;
         m_track = cmd.track;
         m_playing = false;
+        m_scheduled = false;
         m_pending = Pending::None;
         m_audiblePos = m_feedPos = cmd.a;
         recomputeLoopFrames();
         break;
     case DeckCommand::Play:
+        m_scheduled = false;
         if (m_track && *m_track && !m_playing) {
             const double ratio = targetBaseRatio(m);
             startAt(alignedFrame(m_audiblePos, m), ratio, std::pow(2.0, semitones.load() / 12.0));
@@ -106,10 +108,12 @@ TrackBufferPtr *DeckEngine::handle(const DeckCommand &cmd, const MasterState &m)
         }
         break;
     case DeckCommand::Pause:
+        m_scheduled = false;
         if (m_playing)
             m_pending = Pending::Pause;
         break;
     case DeckCommand::Seek:
+        m_scheduled = false;
         if (m_playing) {
             m_pending = Pending::Seek;
             m_pendingFrame = cmd.a;
@@ -137,6 +141,15 @@ TrackBufferPtr *DeckEngine::handle(const DeckCommand &cmd, const MasterState &m)
         if (m_sync && m_playing) {
             m_pending = Pending::Seek; // snap into phase
             m_pendingFrame = m_audiblePos;
+        }
+        break;
+    case DeckCommand::PlayAt:
+        if (m_track && *m_track && !m_playing && m_grid.valid()) {
+            m_scheduled = true;
+            m_schedMasterBeat = cmd.a;
+            m_schedTrackBeat = cmd.b;
+            m_audiblePos = m_feedPos = m_grid.frameAtBeat(cmd.b, m_sr);
+            recomputeLoopFrames();
         }
         break;
     case DeckCommand::None:
@@ -171,6 +184,15 @@ void DeckEngine::feed(float *l, float *r, int count)
 
 void DeckEngine::render(float *outL, float *outR, int n, const MasterState &m)
 {
+    // a scheduled start: once the master is there, from where the track
+    // would be by now (beat for beat: a synced deck keeps the master's tempo)
+    if (m_scheduled && m_track && *m_track && m.beat >= m_schedMasterBeat) {
+        m_scheduled = false;
+        const double frame = m_grid.frameAtBeat(m_schedTrackBeat + (m.beat - m_schedMasterBeat), m_sr);
+        startAt(frame, targetBaseRatio(m), std::pow(2.0, semitones.load() / 12.0));
+        m_playing = true;
+        m_pending = Pending::None;
+    }
     if (!m_track || !*m_track || !m_playing) {
         m_level *= 0.9f;
         m_lastGain = 0.0f;

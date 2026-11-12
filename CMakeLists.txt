@@ -75,6 +75,8 @@ add_library(beater_core STATIC
     src/audio/AudioEngine.cpp
     src/analysis/Fft.h
     src/analysis/TempoEstimator.h
+    src/analysis/StructureEstimator.h
+    src/analysis/StructureEstimator.cpp
     src/analysis/TempoEstimator.cpp
     src/analysis/KeyEstimator.h
     src/analysis/KeyEstimator.cpp
@@ -121,6 +123,8 @@ set(BEATER_QML
     qml/DeckClock.qml
     qml/PerformStrip.qml
     qml/DeckBeat.qml
+    qml/AutoDjButton.qml
+    qml/AutoDjStatus.qml
 )
 # Put the QML files at the module root so they see the module's C++ types.
 foreach(f IN LISTS BEATER_QML)
@@ -139,6 +143,8 @@ qt_add_qml_module(beater
         src/app/Library.cpp
         src/app/DeckController.h
         src/app/DeckController.cpp
+        src/app/AutoDj.h
+        src/app/AutoDj.cpp
         src/app/AppController.h
         src/app/AppController.cpp
         src/app/WaveformItem.h

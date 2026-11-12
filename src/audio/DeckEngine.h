@@ -31,6 +31,7 @@ struct DeckCommand {
         SetLoop,        // a = startBeat, b = endBeat (b <= a disables region)
         SetLoopEnabled, // a != 0
         SetSync,        // a != 0
+        PlayAt,         // start when the master reaches beat a, at track beat b then (to the sample's block)
     };
     Type type = None;
     double a = 0.0;
@@ -88,6 +89,8 @@ private:
     double m_loopStartF = 0.0, m_loopEndF = 0.0;
 
     bool m_playing = false;
+    bool m_scheduled = false; // PlayAt waiting for its master beat
+    double m_schedMasterBeat = 0.0, m_schedTrackBeat = 0.0;
     Pending m_pending = Pending::None;
     double m_pendingFrame = 0.0;
     bool m_fadeIn = false;

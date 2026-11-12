@@ -27,6 +27,8 @@ AppController::AppController(QObject *parent)
     for (int i = 0; i < 2; ++i)
         m_decks[i] = std::make_unique<DeckController>(i, m_engine.get(), m_library.get());
     applyCrossfader(); // the remembered position
+    m_autoDj = std::make_unique<AutoDj>(m_engine.get(), m_library.get(), deckA(), deckB(),
+                                        [this](double x) { setCrossfader(x); });
     connect(m_library.get(), &Library::recordChanged, this, [this](const QString &id) {
         for (auto &d : m_decks)
             d->refreshFromLibrary(id);
@@ -135,6 +137,7 @@ void AppController::tick()
         d->poll();
     m_masterBeat = m_engine->masterBeat();
     m_masterLevel = m_engine->masterLevel();
+    m_autoDj->tick(m_masterBeat);
     emit masterBeatChanged();
 }
 
@@ -195,6 +198,8 @@ void AppController::loadToDeck(int row, int deck)
     const QString id = m_library->idAt(row);
     if (id.isEmpty() || deck < 0 || deck > 1)
         return;
+    if (m_autoDj->enabled())
+        return m_autoDj->take(id);
     m_decks[deck]->loadRecord(m_library->record(id));
 }
 
@@ -220,6 +225,11 @@ void AppController::loadUrlsToDeck(const QList<QUrl> &urls, int deck)
     if (deck < 0 || deck > 1)
         return;
     const QStringList ids = m_library->addUrls(urls);
+    if (m_autoDj->enabled()) {
+        for (const QString &id : ids)
+            m_autoDj->take(id);
+        return;
+    }
     if (!ids.isEmpty())
         m_decks[deck]->loadRecord(m_library->record(ids.first()));
 }

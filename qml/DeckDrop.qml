@@ -26,16 +26,17 @@ DropArea {
         visible: root.containsDrag
         color: Qt.rgba(0, 0, 0, 0.45)
         border.width: Theme.s(2)
-        border.color: root.deck.playing ? Theme.danger : root.tint
+        border.color: root.deck.playing && !root.app.autoDj.enabled ? Theme.danger : root.tint
         ParamText {
             // at the top, clear of the dragged track under the pointer
             anchors.top: parent.top
             anchors.topMargin: Theme.s(10)
             anchors.horizontalCenter: parent.horizontalCenter
             text: (root.files ? "add to library · " : "")
-                  + (root.deck.playing ? "replace the playing track" : "load into deck " + root.deck.name)
+                  + (root.app.autoDj.enabled ? "queue for the auto mix"
+                     : root.deck.playing ? "replace the playing track" : "load into deck " + root.deck.name)
             tone: "normal"
-            color: root.deck.playing ? Theme.danger : root.tint
+            color: root.deck.playing && !root.app.autoDj.enabled ? Theme.danger : root.tint
             font.weight: Font.Bold
             wrapMode: Text.NoWrap
         }

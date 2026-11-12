@@ -4,6 +4,7 @@
 
 #include <QElapsedTimer>
 #include <QObject>
+#include <QVariant>
 #include <QtQml/qqmlregistration.h>
 
 class AudioEngine;
@@ -75,6 +76,17 @@ class DeckController : public QObject {
     Q_PROPERTY(double endEndBeat READ endEndBeat NOTIFY loopChanged)
     Q_PROPERTY(bool endAuto READ endAuto NOTIFY loopChanged)
 
+    // ---- sections and the auto mix
+    //! The track's sections, in beats on its grid: [{ start, end, drop }].
+    Q_PROPERTY(QVariantList sections READ sections NOTIFY gridChanged)
+    //! Where the intro ends: the first drop, a bar line (-1: unknown).
+    Q_PROPERTY(double firstDropBeat READ firstDropBeat NOTIFY gridChanged)
+    //! An auto mix planned on this deck: "out" (it gives way), "in" (it comes
+    //! in) or "". mixStartBeat .. mixEndBeat is the overlap on this deck's grid.
+    Q_PROPERTY(QString mixRole READ mixRole NOTIFY mixChanged)
+    Q_PROPERTY(double mixStartBeat READ mixStartBeat NOTIFY mixChanged)
+    Q_PROPERTY(double mixEndBeat READ mixEndBeat NOTIFY mixChanged)
+
     Q_PROPERTY(double volume READ volume WRITE setVolume NOTIFY volumeChanged)
     Q_PROPERTY(int waveformRevision READ waveformRevision NOTIFY trackChanged)
 
@@ -133,6 +145,19 @@ public:
     double endStartBeat() const { return m_endStart; }
     double endEndBeat() const { return m_endEnd; }
     bool endAuto() const { return !m_rec.hasManualLoop(); }
+
+    QVariantList sections() const;
+    double firstDropBeat() const;
+    const QVector<TrackSection> &sectionsSec() const { return m_rec.sections; }
+    //! A time on the track as a beat on its grid, to the nearest bar line.
+    double barAtSec(double sec) const;
+    QString mixRole() const { return m_mixRole; }
+    double mixStartBeat() const { return m_mixStart; }
+    double mixEndBeat() const { return m_mixEnd; }
+    void setMix(const QString &role, double startBeat, double endBeat);
+    //! Play from trackBeat once the master reaches masterBeat (to the audio
+    //! block), its loops released so it runs on: how an auto mix starts a deck.
+    void scheduleStart(double masterBeat, double trackBeat);
 
     double volume() const { return m_volume; }
     void setVolume(double v);
@@ -204,6 +229,7 @@ signals:
     void syncChanged();
     void loopChanged();
     void volumeChanged();
+    void mixChanged();
 
 private:
     void sendGrid();
@@ -244,6 +270,8 @@ private:
     bool m_endArmed = true;
     double m_endStart = 0.0, m_endEnd = 0.0;
     QElapsedTimer m_loopSwitchedAt; // the auto-release waits for a jump in to land
+    QString m_mixRole;
+    double m_mixStart = 0.0, m_mixEnd = 0.0;
     double m_volume = 0.8;
     double m_xfadeGain = 1.0;
     void applyGain();

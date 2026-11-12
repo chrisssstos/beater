@@ -135,8 +135,17 @@ that mode, `BEATER_FPS=1` logs frames per second and the time spent building wav
   neon is deck B; everything in a deck lights up in its colour. The master tempo and the deck clocks
   are reflective LCDs.
 - **Keys** show as names (F#m). BPMs show as whole numbers unless they have decimals. LOOP toggles looping on the deck.
-- **Volume**: a fader per deck plus master. No automatic transitions.
-- **Analysis**: BPM, beat grid and key are detected on import (tracks analyzed by an older
+- **Volume**: a fader per deck plus master. Mixing is yours, unless Auto is on.
+- **Auto mix** (Auto, in every mode): drop tracks (on a deck, or pick them in the library)
+  and they queue up and mix themselves in. The one playing gives way at its next breakdown
+  (its outro if none is left): the new track starts so its intro plays over that breakdown
+  and its first drop lands where the breakdown ends, in phase on the master clock. The
+  crossfader brings it up over the breakdown and cuts to it on the drop; two bars later
+  the old deck stops and the next queued track loads there. The status line says what's
+  coming and when; the loop lanes outline the overlap on both decks. Sections come from
+  the analysis (how much kick and bass each bar has, snapped to 4-bar phrases); the drops
+  show as a thin line along the foot of each loop lane. Pausing either deck calls the mix off.
+- **Analysis**: BPM, beat grid, key and sections (drops, breakdowns) are detected on import (tracks analyzed by an older
   build are analyzed again once). Everything is editable: click the BPM to type it, ×2 / ÷2,
   TAP, nudge the grid, SET 1 puts the downbeat at the playhead, pick the key from the list.
   **Auto** (next to the grid, and next to the key) drops your edit and detects it again. Edits are stored per track (keyed by file content, so renames don't lose them) in `~/Library/Application Support/BLOCK SYSTEM/beater/library.json` and are never overwritten by re-analysis.

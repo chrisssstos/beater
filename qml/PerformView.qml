@@ -36,6 +36,7 @@ Item {
                 Layout.alignment: Qt.AlignVCenter
             }
             Item { Layout.fillWidth: true }
+            AutoDjButton { app: root.app }
             ParamButton {
                 // keep the window above Resolume
                 text: "Pin"
@@ -47,6 +48,11 @@ Item {
                 mode: "column"
                 onSwitched: m => root.modeRequested(m)
             }
+        }
+
+        AutoDjStatus {
+            app: root.app
+            Layout.fillWidth: true
         }
 
         RowLayout {

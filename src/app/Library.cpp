@@ -1,6 +1,7 @@
 #include "app/Library.h"
 
 #include "analysis/KeyEstimator.h"
+#include "analysis/StructureEstimator.h"
 #include "analysis/TempoEstimator.h"
 #include "audio/Decoder.h"
 #include "core/Key.h"
@@ -345,20 +346,28 @@ void Library::analyze(const QString &id)
     emit recordChanged(id);
 
     const QString path = r.path;
-    m_pool.start([this, id, path] {
+    // sections follow the grid the track will play on: yours if you set one
+    const bool manualGrid = r.gridManual && r.bpm > 0.0;
+    const double gridBpm = r.bpm, gridFirst = r.firstBeatSec;
+    m_pool.start([this, id, path, manualGrid, gridBpm, gridFirst] {
         constexpr uint32_t kSr = 22050;
         std::vector<float> mono;
         std::string err;
         TempoResult tr;
         KeyResult kr;
+        StructureResult sr;
         double duration = 0.0;
         const bool ok = decoder::decodeMono(path.toStdString(), kSr, mono, &err);
         if (ok) {
             duration = double(mono.size()) / kSr;
             tr = estimateTempo(mono, kSr);
             kr = estimateKey(mono, kSr);
+            if (manualGrid)
+                sr = estimateStructure(mono, kSr, gridBpm, gridFirst);
+            else if (tr.ok)
+                sr = estimateStructure(mono, kSr, tr.bpm, tr.firstBeatSec);
         }
-        QMetaObject::invokeMethod(this, [this, id, ok, err, tr, kr, duration] {
+        QMetaObject::invokeMethod(this, [this, id, ok, err, tr, kr, sr, duration] {
             --m_analyzing;
             emit analyzingCountChanged();
             if (!m_tracks.contains(id))
@@ -379,6 +388,13 @@ void Library::analyze(const QString &id)
                 if (!r.keyManual && kr.ok) {
                     r.key = kr.key;
                     r.keyConfidence = kr.confidence;
+                }
+                r.sections.clear();
+                r.firstDropSec = -1.0;
+                if (sr.ok) {
+                    for (const Section &s : sr.sections)
+                        r.sections.append({s.startSec, s.endSec, s.drop});
+                    r.firstDropSec = sr.firstDropSec;
                 }
             }
             update(r);

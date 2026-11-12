@@ -1,6 +1,7 @@
 // Headless checks for the audio core: tempo estimate, sync/phase lock,
-// key shift, end loops, key estimate. Run: ./engine_test
+// key shift, end loops, key estimate, sections, scheduled starts. Run: ./engine_test
 #include "analysis/KeyEstimator.h"
+#include "analysis/StructureEstimator.h"
 #include "analysis/TempoEstimator.h"
 #include "core/Key.h"
 #include "audio/AudioEngine.h"
@@ -221,6 +222,92 @@ static void testSync()
     CHECK(std::abs(mean - 60.0 / 128.0) < 0.002, "interval %.4f", mean);
 }
 
+// A track that's silent but for one click at track beat 40, scheduled to
+// start at track beat 32 when the master reaches beat 24: the click must sound
+// at master beat 32, though the track is at 130 bpm and the master at 125.
+static void testPlayAt()
+{
+    std::printf("scheduled start\n");
+    const uint32_t sr = 48000;
+    AudioEngine e;
+    e.initOffline(sr);
+    e.setMasterBpm(125.0);
+    e.setMasterVolume(1.0f);
+    const double tBpm = 130.0, first = 0.21;
+    std::vector<float> x(size_t(40.0 * sr), 0.0f);
+    const size_t at = size_t((first + 40 * 60.0 / tBpm) * sr);
+    for (size_t i = 0; i < size_t(0.12 * sr); ++i) {
+        const double tt = double(i) / sr;
+        x[at + i] = float(0.9 * std::sin(2 * M_PI * 55.0 * tt * (1.0 + 2.0 * std::exp(-tt * 40))) * std::exp(-tt * 18));
+    }
+    // the detector's own lag, from the same click at a known time
+    double lag = 0.0;
+    {
+        std::vector<float> v(size_t(2 * sr) * 2, 0.0f);
+        for (size_t i = 0; i < size_t(0.12 * sr); ++i)
+            v[2 * (size_t(sr) + i)] = x[at + i];
+        auto o = onsets(v, sr);
+        lag = o.empty() ? 0.0 : o[0] - 1.0;
+    }
+    e.post(0, {DeckCommand::Load, 0.0, 0.0, makeTrack(x, sr)});
+    e.post(0, {DeckCommand::SetGrid, tBpm, first});
+    e.post(0, {DeckCommand::SetLoopEnabled, 0.0});
+    e.post(0, {DeckCommand::SetSync, 1.0});
+    e.post(0, {DeckCommand::PlayAt, 24.0, 32.0});
+    auto out = renderSeconds(e, 20.0);
+    auto on = onsets(out, sr);
+    const double want = 32.0 * 60.0 / 125.0;
+    const double got = on.empty() ? -1.0 : on[0] - lag;
+    std::printf("  click at master beat 32: %.4f s (expect %.4f), %zu onsets\n", got, want, on.size());
+    CHECK(on.size() == 1, "%zu onsets", on.size());
+    CHECK(std::abs(got - want) < 0.005, "off by %.1f ms", (got - want) * 1000);
+}
+
+// Sections of a made-up track: 16 bars of hats, a 32-bar drop (kick and bass),
+// a 16-bar breakdown (a pad), another 32-bar drop and an 8-bar outro.
+static void testSections()
+{
+    std::printf("sections\n");
+    const uint32_t sr = 22050;
+    const double bpm = 140.0, bar = 4 * 60.0 / bpm;
+    const int plan[] = {16, 32, 16, 32, 8};
+    const bool drop[] = {false, true, false, true, false};
+    std::vector<float> x(size_t(104 * bar * sr) + sr, 0.0f);
+    std::mt19937 rng(3);
+    std::uniform_real_distribution<float> u(-1.f, 1.f);
+    int b0 = 0;
+    for (int s = 0; s < 5; ++s) {
+        for (int b = b0; b < b0 + plan[s]; ++b) {
+            for (int beat = 0; beat < 4; ++beat) {
+                const size_t o = size_t((b * bar + beat * bar / 4) * sr);
+                for (size_t i = 0; i < size_t(0.03 * sr); ++i) // a hat on the off-beat, always
+                    x[o + size_t(bar / 8 * sr) + i] += 0.2f * u(rng) * float(std::exp(-double(i) / sr * 120));
+                for (size_t i = 0; i < size_t(bar / 4 * sr); ++i) {
+                    const double t = double(i) / sr;
+                    if (drop[s]) // kick and a sub bass
+                        x[o + i] += float(0.8 * std::sin(2 * M_PI * 50 * t * (1 + 2 * std::exp(-t * 40))) * std::exp(-t * 12)
+                                          + 0.4 * std::sin(2 * M_PI * 49.0 * t));
+                    else if (s == 2) // the breakdown's pad
+                        x[o + i] += float(0.15 * std::sin(2 * M_PI * 440.0 * t) + 0.1 * std::sin(2 * M_PI * 659.3 * t));
+                }
+            }
+        }
+        b0 += plan[s];
+    }
+    StructureResult r = estimateStructure(x, sr, bpm, 0.0);
+    std::printf("  %s\n", r.bars.c_str());
+    CHECK(r.ok && r.sections.size() == 5, "%zu sections", r.sections.size());
+    if (r.sections.size() == 5) {
+        int at = 0;
+        for (int s = 0; s < 5; ++s) {
+            CHECK(std::abs(r.sections[size_t(s)].startSec - at * bar) < 0.01 && r.sections[size_t(s)].drop == drop[s],
+                  "section %d at %.2f s (expect %.2f), drop %d", s, r.sections[size_t(s)].startSec, at * bar, int(r.sections[size_t(s)].drop));
+            at += plan[s];
+        }
+    }
+    CHECK(std::abs(r.firstDropSec - 16 * bar) < 0.01, "first drop %.2f s (expect %.2f)", r.firstDropSec, 16 * bar);
+}
+
 static void testKeyShiftAndLoop()
 {
     std::printf("key shift + end loop\n");
@@ -308,6 +395,8 @@ int main()
     testSync();
     testKeyShiftAndLoop();
     testKey();
+    testPlayAt();
+    testSections();
     testJumpIntoLoopEnd();
     std::printf(g_fail ? "\n%d check(s) failed\n" : "\nall checks passed\n", g_fail);
     return g_fail ? 1 : 0;

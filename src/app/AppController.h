@@ -1,4 +1,5 @@
 #pragma once
+#include "app/AutoDj.h"
 #include "app/DeckController.h"
 #include "app/Library.h"
 #include "audio/AudioEngine.h"
@@ -32,6 +33,7 @@ class AppController : public QObject {
     Q_PROPERTY(DeckController *deckA READ deckA CONSTANT)
     Q_PROPERTY(DeckController *deckB READ deckB CONSTANT)
     Q_PROPERTY(Library *library READ library CONSTANT)
+    Q_PROPERTY(AutoDj *autoDj READ autoDj CONSTANT)
 
 public:
     explicit AppController(QObject *parent = nullptr);
@@ -57,12 +59,14 @@ public:
     DeckController *deckA() const { return m_decks[0].get(); }
     DeckController *deckB() const { return m_decks[1].get(); }
     Library *library() const { return m_library.get(); }
+    AutoDj *autoDj() const { return m_autoDj.get(); }
 
     Q_INVOKABLE void nudgeMasterBpm(double delta) { setMasterBpm(m_masterBpm + delta); }
     Q_INVOKABLE void loadToDeck(int row, int deck);
     Q_INVOKABLE void loadToFreeDeck(int row);
     Q_INVOKABLE void addUrls(const QList<QUrl> &urls) { m_library->addUrls(urls); }
     // Files dropped on a deck: into the library, and the first one onto the deck.
+    // With Auto on, tracks go into its queue instead (all of them).
     Q_INVOKABLE void loadUrlsToDeck(const QList<QUrl> &urls, int deck);
     Q_INVOKABLE void matchMasterTo(int deck);
 
@@ -84,6 +88,7 @@ private:
     std::unique_ptr<AudioEngine> m_engine;
     std::unique_ptr<Library> m_library;
     std::unique_ptr<DeckController> m_decks[2];
+    std::unique_ptr<AutoDj> m_autoDj;
     QTimer m_timer;
 
     double m_masterBpm = 125.0;

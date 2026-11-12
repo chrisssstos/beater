@@ -63,7 +63,17 @@ Item {
             }
         }
 
-        Item { Layout.fillWidth: true }
+        ColumnLayout {
+            spacing: Theme.s(4)
+            Layout.fillWidth: true
+            Layout.minimumWidth: Theme.s(120)
+            ParamText { text: "auto mix"; caps: true; wrapMode: Text.NoWrap }
+            RowLayout {
+                spacing: Theme.s(8)
+                AutoDjButton { app: root.app }
+                AutoDjStatus { app: root.app; Layout.fillWidth: true }
+            }
+        }
 
         Column {
             spacing: Theme.s(4)

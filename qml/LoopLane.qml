@@ -39,6 +39,42 @@ Item {
 
     Rectangle { width: parent.width; height: lane.laneHeight; color: Theme.well }
 
+    // the drops (detected): a thin line along the foot of the lane
+    Repeater {
+        model: lane.ready ? lane.deck.sections : []
+        Rectangle {
+            required property var modelData
+            visible: modelData.drop
+            x: lane.xAtBeat(modelData.start)
+            width: Math.max(0, lane.xAtBeat(modelData.end) - x)
+            y: lane.laneHeight - height
+            height: Theme.s(2)
+            color: Theme.textFaint
+        }
+    }
+
+    // an auto mix planned on this deck: where the two tracks overlap (on the
+    // one going out, its breakdown; on the one coming in, its intro to the drop)
+    Rectangle {
+        id: mixMark
+        visible: lane.ready && lane.deck.mixRole.length > 0
+        x: lane.xAtBeat(lane.deck.mixStartBeat)
+        width: Math.max(Theme.s(2), lane.xAtBeat(lane.deck.mixEndBeat) - x)
+        height: lane.laneHeight
+        color: "transparent"
+        border.width: Theme.s(1)
+        border.color: Theme.text
+        z: 3
+        ParamText {
+            anchors.centerIn: parent
+            visible: lane.tags ? false : implicitWidth < parent.width - Theme.s(6)
+            text: lane.deck.mixRole === "out" ? "mix out" : "mix in"
+            small: true
+            tone: "normal"
+            wrapMode: Text.NoWrap
+        }
+    }
+
     component Region: Rectangle {
         id: r
         required property string kind   // "intro", "custom", "end"

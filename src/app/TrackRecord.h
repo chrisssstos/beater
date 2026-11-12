@@ -1,12 +1,22 @@
 #pragma once
 #include "core/BeatGrid.h"
 
+#include <QJsonArray>
 #include <QJsonObject>
 #include <QString>
+#include <QVector>
 
 // Bump when the analyzers change, so tracks analyzed before get analyzed again
 // (manual edits are kept either way).
-constexpr int kAnalysisVersion = 5; // 2: key detection, 3: fine beat phase + grid from the start, 4: minor / bass key, 5: learned key profiles
+constexpr int kAnalysisVersion = 6; // 2: key detection, 3: fine beat phase + grid from the start, 4: minor / bass key, 5: learned key profiles, 6: sections
+// A stretch of the track: a drop (the full low end) or not (intro, breakdown, outro).
+struct TrackSection {
+    double startSec = 0.0;
+    double endSec = 0.0;
+    bool drop = false;
+    bool operator==(const TrackSection &o) const { return startSec == o.startSec && endSec == o.endSec && drop == o.drop; }
+};
+
 // Everything the app remembers about a track. Keyed by a content hash so edits
 // survive renames and moves.
 struct TrackRecord {
@@ -33,6 +43,10 @@ struct TrackRecord {
     // In / Out loop in beats. end <= start = none.
     double customStartBeat = 0.0;
     double customEndBeat = 0.0;
+
+    // Sections (detected), in seconds so grid edits don't move them.
+    QVector<TrackSection> sections;
+    double firstDropSec = -1.0; // the end of the intro (< 0: unknown)
 
     bool analyzed = false;
     int analysisVersion = 0;
@@ -63,6 +77,11 @@ struct TrackRecord {
         o["introEnd"] = introEndBeat;
         o["customStart"] = customStartBeat;
         o["customEnd"] = customEndBeat;
+        QJsonArray secs;
+        for (const TrackSection &s : sections)
+            secs.append(QJsonArray{s.startSec, s.endSec, s.drop});
+        o["sections"] = secs;
+        o["firstDrop"] = firstDropSec;
         o["analyzed"] = analyzed;
         o["analysisVersion"] = analysisVersion;
         return o;
@@ -88,6 +107,12 @@ struct TrackRecord {
         r.introEndBeat = o["introEnd"].toDouble();
         r.customStartBeat = o["customStart"].toDouble();
         r.customEndBeat = o["customEnd"].toDouble();
+        for (const QJsonValue &v : o["sections"].toArray()) {
+            const QJsonArray a = v.toArray();
+            if (a.size() == 3)
+                r.sections.append({a[0].toDouble(), a[1].toDouble(), a[2].toBool()});
+        }
+        r.firstDropSec = o["firstDrop"].toDouble(-1.0);
         r.analyzed = o["analyzed"].toBool();
         r.analysisVersion = o["analysisVersion"].toInt();
         return r;
