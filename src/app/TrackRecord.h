@@ -8,7 +8,7 @@
 
 // Bump when the analyzers change, so tracks analyzed before get analyzed again
 // (manual edits are kept either way).
-constexpr int kAnalysisVersion = 6; // 2: key detection, 3: fine beat phase + grid from the start, 4: minor / bass key, 5: learned key profiles, 6: sections
+constexpr int kAnalysisVersion = 7; // 2: key detection, 3: fine beat phase + grid from the start, 4: minor / bass key, 5: learned key profiles, 6: sections, 7: bar-length tempo, rise-edge beats, learned downbeat
 // A stretch of the track: a drop (the full low end) or not (intro, breakdown, outro).
 struct TrackSection {
     double startSec = 0.0;
